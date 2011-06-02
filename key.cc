@@ -2,6 +2,7 @@
 #include <string.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
+#include <openssl/err.h>
 
 #include "key.h"
 
@@ -20,7 +21,9 @@ static Handle<Value> makeBuffer(unsigned char *data, int length) {
 }
 
 static Handle<Value> bnToBinary(BIGNUM *bn) {
+  if (!bn) return Null();
   Handle<Value> result;
+
   unsigned char *data = new unsigned char[BN_num_bytes(bn)];
   int len = BN_bn2bin(bn, data);
   if (len > 0) {
@@ -29,6 +32,7 @@ static Handle<Value> bnToBinary(BIGNUM *bn) {
     result = Null();
   }
   delete[] data;
+
   return result;
 }
 
@@ -41,6 +45,7 @@ void Key::Initialize (Handle<Object> target)
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
     NODE_SET_PROTOTYPE_METHOD(t, "loadPublic", LoadPublic);
+    NODE_SET_PROTOTYPE_METHOD(t, "loadPrivate", LoadPrivate);
     NODE_SET_PROTOTYPE_METHOD(t, "getRSA", GetRSA);
 
     target->Set(String::NewSymbol("Key"), t->GetFunction());
@@ -77,6 +82,7 @@ Handle<Value> Key::KeyLoadPublic(Handle<Value> arg, Local<Object> This) {
     // TODO: assert !res
     int len = s->Length();
     char *buf = new char[len];
+    s->WriteAscii(buf, 0, len);
     BIO_write(bp, buf, len);
     delete[] buf;
 
@@ -104,7 +110,51 @@ Key::LoadPublic(const Arguments& args) {
     Key *key = ObjectWrap::Unwrap<Key>(args.This());
     return key->KeyLoadPublic(args[0], args.This());
   } else {
-    /* TODO: also w/ buffer */
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
+  }
+}
+
+Handle<Value> Key::KeyLoadPrivate(Handle<Value> arg, Local<Object> This) {
+  HandleScope scope;
+
+  KeyFree();
+
+  BIO *bp = BIO_new(BIO_s_mem());
+  // TODO: assert bp
+
+  if (arg->IsString()) {
+    Local<String> s = arg->ToString();
+    // TODO: assert !res
+    int len = s->Length();
+    char *buf = new char[len];
+    s->WriteAscii(buf, 0, len);
+    BIO_write(bp, buf, len);
+    delete[] buf;
+
+    return This;
+  } else if (Buffer::HasInstance(arg)) {
+    Local<Object> buf = arg->ToObject();
+    BIO_write(bp, Buffer::Data(buf), Buffer::Length(buf));
+  } else {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
+  }
+
+  pkey = PEM_read_bio_PrivateKey(bp, NULL, NULL, NULL);
+  ERR_print_errors_fp(stderr);
+  // TODO: assert pkey
+  BIO_free(bp);
+}
+
+Handle<Value>
+Key::LoadPrivate(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() == 1) {
+    Key *key = ObjectWrap::Unwrap<Key>(args.This());
+    return key->KeyLoadPrivate(args[0], args.This());
+  } else {
     Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
     return ThrowException(exception);
   }
@@ -120,6 +170,9 @@ Handle<Value> Key::KeyGetRSA() {
 
       result->Set(String::NewSymbol("n"), bnToBinary(rsa->n));
       result->Set(String::NewSymbol("e"), bnToBinary(rsa->e));
+      result->Set(String::NewSymbol("q"), bnToBinary(rsa->q));
+      result->Set(String::NewSymbol("p"), bnToBinary(rsa->p));
+      result->Set(String::NewSymbol("d"), bnToBinary(rsa->d));
 
       return scope.Close(result);
     } else {

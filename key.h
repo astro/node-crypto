@@ -9,6 +9,7 @@ class Key : public ObjectWrap {
   static void
     Initialize (v8::Handle<v8::Object> target);
   Handle<Value> KeyLoadPublic(Handle<Value> arg, Local<Object> This);
+  Handle<Value> KeyLoadPrivate(Handle<Value> arg, Local<Object> This);
   Handle<Value> KeyGetRSA();
   void KeyFree();
 
@@ -18,6 +19,8 @@ class Key : public ObjectWrap {
     New (const Arguments& args);
   static Handle<Value>
     LoadPublic(const Arguments& args);
+  static Handle<Value>
+    LoadPrivate(const Arguments& args);
   static Handle<Value>
     GetRSA(const Arguments& args);
   Key ();
