@@ -20,7 +20,7 @@ def configure(conf):
 def build(bld):
   obj = bld.new_task_gen("cxx", "shlib", "node_addon")
   obj.target = "crypto"
-  obj.source = "crypto.cc"
+  obj.source = ["crypto.cc", "cipher.cc", "decipher.cc", "hmac.cc", "sign.cc", "hash.cc", "verify.cc"]
   obj.uselib = "OPENSSL"
 
 
