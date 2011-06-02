@@ -13,6 +13,7 @@
 #include "hmac.h"
 #include "sign.h"
 #include "verify.h"
+#include "key.h"
 
 
 #define EVP_F_EVP_DECRYPTFINAL 101
@@ -35,6 +36,7 @@ init (Handle<Object> target)
   Hash::Initialize(target);
   Sign::Initialize(target);
   Verify::Initialize(target);
+  Key::Initialize(target);
 }
 
 void hex_encode(unsigned char *md_value, int md_len, char** md_hexdigest, int* md_hex_len) {
