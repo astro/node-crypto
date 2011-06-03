@@ -44,9 +44,11 @@ void Key::Initialize (Handle<Object> target)
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
+    NODE_SET_PROTOTYPE_METHOD(t, "generate", Generate);
     NODE_SET_PROTOTYPE_METHOD(t, "loadPublic", LoadPublic);
     NODE_SET_PROTOTYPE_METHOD(t, "loadPrivate", LoadPrivate);
     NODE_SET_PROTOTYPE_METHOD(t, "getRSA", GetRSA);
+    /* TODO: NODE_SET_PROTOTYPE_METHOD(t, "setRSA", SetRSA); */
 
     target->Set(String::NewSymbol("Key"), t->GetFunction());
   }
@@ -62,12 +64,50 @@ Handle<Value> Key::New(const Arguments &args) {
   return args.This();
 }
 
+
+Key::Key ()
+  : ObjectWrap(),
+    pkey(NULL) {
+}
+
 void Key::KeyFree() {
   if (pkey) {
     EVP_PKEY_free(pkey);
     pkey = NULL;
   }
 }
+
+Key::~Key () {
+}
+
+/*** generate() ***/
+
+bool Key::KeyGenerate() {
+  KeyFree();
+
+  BIGNUM *bn_e = NULL;
+  BN_hex2bn(&bn_e, "10001");
+  RSA *rsa = RSA_new(); 
+  if (RSA_generate_key_ex(rsa, 2048, bn_e, NULL)) {
+    pkey = EVP_PKEY_new();
+    /* sets reference according to manpage, therefore don't free
+       rsa */
+    EVP_PKEY_assign_RSA(pkey, rsa);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+Handle<Value> Key::Generate(const Arguments& args) {
+  HandleScope scope;
+
+  Key *key = ObjectWrap::Unwrap<Key>(args.This());
+  key->KeyGenerate();
+  return args.This();
+}
+
+/*** loadPublic() ***/
 
 Handle<Value> Key::KeyLoadPublic(Handle<Value> arg, Local<Object> This) {
   HandleScope scope;
@@ -115,6 +155,8 @@ Key::LoadPublic(const Arguments& args) {
   }
 }
 
+/*** loadPrivate() ***/
+
 Handle<Value> Key::KeyLoadPrivate(Handle<Value> arg, Local<Object> This) {
   HandleScope scope;
 
@@ -160,6 +202,8 @@ Key::LoadPrivate(const Arguments& args) {
   }
 }
 
+/*** getRSA() ***/
+
 Handle<Value> Key::KeyGetRSA() {
   HandleScope scope;
 
@@ -190,11 +234,3 @@ Handle<Value> Key::GetRSA(const Arguments& args) {
   return key->KeyGetRSA();
 }
 
-
-Key::Key ()
-  : ObjectWrap(),
-    pkey(NULL) {
-}
-
-Key::~Key () {
-}

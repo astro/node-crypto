@@ -103,3 +103,12 @@ assert.equal(n, rsa.n.toString('binary'));
 assert.equal(p, rsa.p.toString('binary'));
 assert.equal(q, rsa.q.toString('binary'));
 assert.equal(d, rsa.d.toString('binary'));
+
+key=(new crypto.Key);
+assert.ok(key.generate());
+rsa = key.getRSA();
+assert.ok(rsa.e.length);
+assert.ok(rsa.n.length);
+assert.ok(rsa.p.length);
+assert.ok(rsa.q.length);
+assert.ok(rsa.d.length);
