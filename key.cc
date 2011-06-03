@@ -47,6 +47,7 @@ void Key::Initialize (Handle<Object> target)
     NODE_SET_PROTOTYPE_METHOD(t, "generate", Generate);
     NODE_SET_PROTOTYPE_METHOD(t, "loadPublic", LoadPublic);
     NODE_SET_PROTOTYPE_METHOD(t, "loadPrivate", LoadPrivate);
+    NODE_SET_PROTOTYPE_METHOD(t, "toString", ToString);
     NODE_SET_PROTOTYPE_METHOD(t, "getRSA", GetRSA);
     /* TODO: NODE_SET_PROTOTYPE_METHOD(t, "setRSA", SetRSA); */
 
@@ -120,19 +121,13 @@ Handle<Value> Key::KeyLoadPublic(Handle<Value> arg, Local<Object> This) {
   BIO *bp = BIO_new(BIO_s_mem());
   // TODO: assert bp
 
-  if (arg->IsString()) {
-    Local<String> s = arg->ToString();
-    // TODO: assert !res
-    int len = s->Length();
+  ssize_t len = DecodeBytes(arg);
+  if (len >= 0) {
     char *buf = new char[len];
-    s->WriteAscii(buf, 0, len);
+    len = DecodeWrite(buf, len, arg);
+    // TODO: assert !res
     BIO_write(bp, buf, len);
     delete[] buf;
-
-    return This;
-  } else if (Buffer::HasInstance(arg)) {
-    Local<Object> buf = arg->ToObject();
-    BIO_write(bp, Buffer::Data(buf), Buffer::Length(buf));
   } else {
     Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
     return ThrowException(exception);
@@ -141,6 +136,8 @@ Handle<Value> Key::KeyLoadPublic(Handle<Value> arg, Local<Object> This) {
   X509 *x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL);
   // TODO: assert x509
   pkey = X509_get_pubkey(x509);
+  if (!pkey)
+    ERR_print_errors_fp(stderr);
   X509_free(x509);
   BIO_free(bp);
 }
@@ -160,6 +157,7 @@ Key::LoadPublic(const Arguments& args) {
 
 /*** loadPrivate() ***/
 
+// TODO: w/ passphrase
 Handle<Value> Key::KeyLoadPrivate(Handle<Value> arg, Local<Object> This) {
   HandleScope scope;
 
@@ -187,8 +185,9 @@ Handle<Value> Key::KeyLoadPrivate(Handle<Value> arg, Local<Object> This) {
   }
 
   pkey = PEM_read_bio_PrivateKey(bp, NULL, NULL, NULL);
-  ERR_print_errors_fp(stderr);
   // TODO: assert pkey
+  if (!pkey)
+    ERR_print_errors_fp(stderr);
   BIO_free(bp);
 }
 
@@ -203,6 +202,50 @@ Key::LoadPrivate(const Arguments& args) {
     Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
     return ThrowException(exception);
   }
+}
+
+/*** toString() ***/
+
+Handle<Value> Key::KeyToString() {
+  HandleScope scope;
+  Handle<Value> result = Null();
+
+  if (EVP_PKEY_type(pkey->type) == EVP_PKEY_RSA) {
+    BIO *bp = BIO_new(BIO_s_mem());
+
+    struct rsa_st *rsa = EVP_PKEY_get1_RSA(pkey);
+    // TODO: let openssl check for priv/pub?
+    if (rsa && rsa->d) {
+      /* d: is private key */
+      if (PEM_write_bio_RSAPrivateKey(bp, rsa, NULL, NULL, 0, NULL, NULL)) {
+        char *data;
+        long len = BIO_get_mem_data(bp, &data);
+        result = scope.Close(Encode(data, len));
+      }
+    } else if (rsa && rsa->n) {
+      /* n: is at least public key */
+      X509 *x509 = X509_new();
+      // TODO: assert result
+      X509_set_pubkey(x509, pkey);
+      if (PEM_write_bio_X509(bp, x509)) {
+        char *data;
+        long len = BIO_get_mem_data(bp, &data);
+        result = scope.Close(Encode(data, len));
+      }
+      X509_free(x509);
+    }
+
+    BIO_free(bp);
+  }
+
+  return result;
+}
+
+Handle<Value> Key::ToString(const Arguments& args) {
+  HandleScope scope;
+
+  Key *key = ObjectWrap::Unwrap<Key>(args.This());
+  return scope.Close(key->KeyToString());
 }
 
 /*** getRSA() ***/
@@ -237,3 +280,6 @@ Handle<Value> Key::GetRSA(const Arguments& args) {
   return key->KeyGetRSA();
 }
 
+/*** setRSA() ***/
+
+// TODO: use RSA_check_key()

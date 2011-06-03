@@ -11,6 +11,7 @@ class Key : public ObjectWrap {
   bool KeyGenerate();
   Handle<Value> KeyLoadPublic(Handle<Value> arg, Local<Object> This);
   Handle<Value> KeyLoadPrivate(Handle<Value> arg, Local<Object> This);
+  Handle<Value> KeyToString();
   Handle<Value> KeyGetRSA();
   void KeyFree();
 
@@ -24,6 +25,8 @@ class Key : public ObjectWrap {
     LoadPublic(const Arguments& args);
   static Handle<Value>
     LoadPrivate(const Arguments& args);
+  static Handle<Value>
+    ToString(const Arguments& args);
   static Handle<Value>
     GetRSA(const Arguments& args);
   Key ();

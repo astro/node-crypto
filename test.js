@@ -89,13 +89,19 @@ var q = "\xf3\xdc\x80\x15\x4d\x74\xd6\x52\x67\xc8\x51\xe2\x88\x08" +
     "\x48\xd4\x4f\x28\x3d\xa1\xa0\xb6\xc5\xb8\x71\x44\x46\x57\x12" +
     "\xef\xda\x5b\x09\x9d";
 
-var key=(new crypto.Key);
-key.loadPublic(certPem);
-var rsa = key.getRSA();
+console.log('cert1');
+var cert=(new crypto.Key);
+cert.loadPublic(certPem);
+var rsa = cert.getRSA();
 assert.equal(e, rsa.e.toString('binary'));
 assert.equal(n, rsa.n.toString('binary'));
+console.log('cert2');
+var cert2 = (new crypto.Key);
+cert2.loadPublic(cert.toString());
+assert.equal(cert.toString(), cert2.toString());
 
-key=(new crypto.Key);
+console.log('key1');
+var key=(new crypto.Key);
 key.loadPrivate(keyPem);
 rsa = key.getRSA();
 assert.equal(e, rsa.e.toString('binary'));
@@ -103,7 +109,9 @@ assert.equal(n, rsa.n.toString('binary'));
 assert.equal(p, rsa.p.toString('binary'));
 assert.equal(q, rsa.q.toString('binary'));
 assert.equal(d, rsa.d.toString('binary'));
+assert.equal(keyPem.toString(), key.toString());
 
+console.log('key2');
 key=(new crypto.Key);
 assert.ok(key.generate());
 rsa = key.getRSA();
