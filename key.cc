@@ -83,20 +83,23 @@ Key::~Key () {
 /*** generate() ***/
 
 bool Key::KeyGenerate() {
+  bool result = false;
   KeyFree();
 
   BIGNUM *bn_e = NULL;
   BN_hex2bn(&bn_e, "10001");
+
   RSA *rsa = RSA_new(); 
   if (RSA_generate_key_ex(rsa, 2048, bn_e, NULL)) {
     pkey = EVP_PKEY_new();
     /* sets reference according to manpage, therefore don't free
        rsa */
     EVP_PKEY_assign_RSA(pkey, rsa);
-    return true;
-  } else {
-    return false;
+    result = true;
   }
+
+  BN_free(bn_e);
+  return result;
 }
 
 Handle<Value> Key::Generate(const Arguments& args) {
