@@ -13,6 +13,7 @@ class Key : public ObjectWrap {
   Handle<Value> KeyLoadPrivate(Handle<Value> arg, Local<Object> This);
   Handle<Value> KeyToString();
   Handle<Value> KeyGetRSA();
+  void KeySetRSA(Handle<Object> arg);
   void KeyFree();
 
  protected:
@@ -29,6 +30,8 @@ class Key : public ObjectWrap {
     ToString(const Arguments& args);
   static Handle<Value>
     GetRSA(const Arguments& args);
+  static Handle<Value>
+    SetRSA(const Arguments& args);
   Key ();
   ~Key ();
 

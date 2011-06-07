@@ -36,6 +36,14 @@ static Handle<Value> bnToBinary(BIGNUM *bn) {
   return result;
 }
 
+static BIGNUM *binaryToBn(Handle<Value> &bin) {
+  ssize_t len = DecodeBytes(bin);
+  unsigned char *buf = new unsigned char[len];
+  BIGNUM *result = BN_bin2bn(buf, len, NULL);
+  delete[] buf;
+  return result;
+}
+
 void Key::Initialize (Handle<Object> target)
   {
     HandleScope scope;
@@ -49,7 +57,7 @@ void Key::Initialize (Handle<Object> target)
     NODE_SET_PROTOTYPE_METHOD(t, "loadPrivate", LoadPrivate);
     NODE_SET_PROTOTYPE_METHOD(t, "toString", ToString);
     NODE_SET_PROTOTYPE_METHOD(t, "getRSA", GetRSA);
-    /* TODO: NODE_SET_PROTOTYPE_METHOD(t, "setRSA", SetRSA); */
+    NODE_SET_PROTOTYPE_METHOD(t, "setRSA", SetRSA);
 
     target->Set(String::NewSymbol("Key"), t->GetFunction());
   }
@@ -254,15 +262,19 @@ Handle<Value> Key::KeyGetRSA() {
   HandleScope scope;
 
   if (EVP_PKEY_type(pkey->type) == EVP_PKEY_RSA) {
-    struct rsa_st *rsa = EVP_PKEY_get1_RSA(pkey);
+    RSA *rsa = EVP_PKEY_get1_RSA(pkey);
     if (rsa) {
       Local<Object> result = Object::New();
 
+      result->Set(String::NewSymbol("version"), bnToBinary(rsa->n));
       result->Set(String::NewSymbol("n"), bnToBinary(rsa->n));
       result->Set(String::NewSymbol("e"), bnToBinary(rsa->e));
       result->Set(String::NewSymbol("q"), bnToBinary(rsa->q));
       result->Set(String::NewSymbol("p"), bnToBinary(rsa->p));
       result->Set(String::NewSymbol("d"), bnToBinary(rsa->d));
+      result->Set(String::NewSymbol("dmp1"), bnToBinary(rsa->dmp1));
+      result->Set(String::NewSymbol("dmq1"), bnToBinary(rsa->dmq1));
+      result->Set(String::NewSymbol("iqmp"), bnToBinary(rsa->iqmp));
 
       return scope.Close(result);
     } else {
@@ -283,3 +295,39 @@ Handle<Value> Key::GetRSA(const Arguments& args) {
 /*** setRSA() ***/
 
 // TODO: use RSA_check_key()
+
+void Key::KeySetRSA(Handle<Object> arg) {
+  KeyFree();
+
+  pkey = EVP_PKEY_new();
+  RSA *rsa = RSA_new();
+  EVP_PKEY_set1_RSA(pkey, rsa);
+
+  Handle<Value> n = arg->Get(String::NewSymbol("n"));
+  if (n->IsString() || Buffer::HasInstance(n)) {
+    rsa->n = binaryToBn(n);
+  }
+  Handle<Value> e = arg->Get(String::NewSymbol("e"));
+  if (e->IsString() || Buffer::HasInstance(e)) {
+    rsa->e = binaryToBn(e);
+  }
+}
+
+/**
+ * Only for public keys for now. Private ones need p, q, ... in
+ * addition to d.
+ */
+Handle<Value>
+Key::SetRSA(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() == 1 &&
+      args[0]->IsObject()) {
+    Key *key = ObjectWrap::Unwrap<Key>(args.This());
+    key->KeySetRSA(args[0]->ToObject());
+    return args.This();
+  } else {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
+  }
+}
