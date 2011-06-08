@@ -230,7 +230,7 @@ Handle<Value> Key::KeyToString() {
   HandleScope scope;
   Handle<Value> result = Null();
 
-  if (EVP_PKEY_type(pkey->type) == EVP_PKEY_RSA) {
+  if (pkey && EVP_PKEY_type(pkey->type) == EVP_PKEY_RSA) {
     BIO *bp = BIO_new(BIO_s_mem());
 
     struct rsa_st *rsa = EVP_PKEY_get1_RSA(pkey);
