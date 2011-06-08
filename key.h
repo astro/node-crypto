@@ -9,11 +9,11 @@ class Key : public ObjectWrap {
   static void
     Initialize (v8::Handle<v8::Object> target);
   bool KeyGenerate();
-  Handle<Value> KeyLoadPublic(Handle<Value> arg, Local<Object> This);
-  Handle<Value> KeyLoadPrivate(Handle<Value> arg, Local<Object> This);
+  bool KeyLoadPublic(Handle<Value> arg);
+  bool KeyLoadPrivate(Handle<Value> arg);
   Handle<Value> KeyToString();
   Handle<Value> KeyGetRSA();
-  void KeySetRSA(Handle<Object> arg);
+  bool KeySetRSA(Handle<Object> arg);
   void KeyFree();
 
  protected:

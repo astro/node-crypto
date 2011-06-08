@@ -67,7 +67,7 @@ Handle<Value> Key::New(const Arguments &args) {
 
   Key *key = new Key();
   if (args.Length() > 0)
-    key->KeyLoadPublic(args[0], args.This());
+    key->KeyLoadPublic(args[0]);
 
   key->Wrap(args.This());
   return args.This();
@@ -121,7 +121,7 @@ Handle<Value> Key::Generate(const Arguments& args) {
 
 /*** loadPublic() ***/
 
-Handle<Value> Key::KeyLoadPublic(Handle<Value> arg, Local<Object> This) {
+bool Key::KeyLoadPublic(Handle<Value> arg) {
   HandleScope scope;
 
   KeyFree();
@@ -137,8 +137,7 @@ Handle<Value> Key::KeyLoadPublic(Handle<Value> arg, Local<Object> This) {
     BIO_write(bp, buf, len);
     delete[] buf;
   } else {
-    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
-    return ThrowException(exception);
+    return false;
   }
 
   X509 *x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL);
@@ -148,6 +147,8 @@ Handle<Value> Key::KeyLoadPublic(Handle<Value> arg, Local<Object> This) {
     ERR_print_errors_fp(stderr);
   X509_free(x509);
   BIO_free(bp);
+
+  return true;
 }
 
 Handle<Value>
@@ -156,7 +157,13 @@ Key::LoadPublic(const Arguments& args) {
 
   if (args.Length() == 1) {
     Key *key = ObjectWrap::Unwrap<Key>(args.This());
-    return key->KeyLoadPublic(args[0], args.This());
+    if (key->KeyLoadPublic(args[0])) {
+      printf("loaded public, pkey: %X\n", key->pkey);
+      return args.This();
+    } else {
+      Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+      return ThrowException(exception);
+    }
   } else {
     Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
     return ThrowException(exception);
@@ -166,7 +173,7 @@ Key::LoadPublic(const Arguments& args) {
 /*** loadPrivate() ***/
 
 // TODO: w/ passphrase
-Handle<Value> Key::KeyLoadPrivate(Handle<Value> arg, Local<Object> This) {
+bool Key::KeyLoadPrivate(Handle<Value> arg) {
   HandleScope scope;
 
   KeyFree();
@@ -182,14 +189,11 @@ Handle<Value> Key::KeyLoadPrivate(Handle<Value> arg, Local<Object> This) {
     s->WriteAscii(buf, 0, len);
     BIO_write(bp, buf, len);
     delete[] buf;
-
-    return This;
   } else if (Buffer::HasInstance(arg)) {
     Local<Object> buf = arg->ToObject();
     BIO_write(bp, Buffer::Data(buf), Buffer::Length(buf));
   } else {
-    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
-    return ThrowException(exception);
+    return false;
   }
 
   pkey = PEM_read_bio_PrivateKey(bp, NULL, NULL, NULL);
@@ -197,6 +201,8 @@ Handle<Value> Key::KeyLoadPrivate(Handle<Value> arg, Local<Object> This) {
   if (!pkey)
     ERR_print_errors_fp(stderr);
   BIO_free(bp);
+
+  return true;
 }
 
 Handle<Value>
@@ -205,7 +211,13 @@ Key::LoadPrivate(const Arguments& args) {
 
   if (args.Length() == 1) {
     Key *key = ObjectWrap::Unwrap<Key>(args.This());
-    return key->KeyLoadPrivate(args[0], args.This());
+    if (key->KeyLoadPrivate(args[0]))
+      return args.This();
+    else {
+      Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+      return ThrowException(exception);
+    }
+
   } else {
     Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
     return ThrowException(exception);
@@ -296,7 +308,7 @@ Handle<Value> Key::GetRSA(const Arguments& args) {
 
 // TODO: use RSA_check_key()
 
-void Key::KeySetRSA(Handle<Object> arg) {
+bool Key::KeySetRSA(Handle<Object> arg) {
   KeyFree();
 
   pkey = EVP_PKEY_new();
@@ -311,6 +323,8 @@ void Key::KeySetRSA(Handle<Object> arg) {
   if (e->IsString() || Buffer::HasInstance(e)) {
     rsa->e = binaryToBn(e);
   }
+
+  return RSA_check_key(rsa);
 }
 
 /**
@@ -324,8 +338,12 @@ Key::SetRSA(const Arguments& args) {
   if (args.Length() == 1 &&
       args[0]->IsObject()) {
     Key *key = ObjectWrap::Unwrap<Key>(args.This());
-    key->KeySetRSA(args[0]->ToObject());
-    return args.This();
+    if (key->KeySetRSA(args[0]->ToObject()))
+      return args.This();
+    else {
+      Local<Value> exception = Exception::TypeError(String::New("Invalid RSA key"));
+      return ThrowException(exception);
+    }
   } else {
     Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
     return ThrowException(exception);
