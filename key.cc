@@ -44,6 +44,36 @@ static BIGNUM *binaryToBn(Handle<Value> &bin) {
   return result;
 }
 
+/**
+ * Do not forget to call BIO_free() after use
+ */
+static BIO *binaryToBIO(Handle<Value> &bin) {
+  BIO *bp = BIO_new(BIO_s_mem());
+  if (!bp)
+    return NULL;
+
+  if (Buffer::HasInstance(bin)) {
+    /* Copy only once for Buffer */
+    Local<Object> buf = bin->ToObject();
+    BIO_write(bp, Buffer::Data(buf), Buffer::Length(buf));
+
+  } else {
+    ssize_t len = DecodeBytes(bin);
+    if (len >= 0) {
+      char *buf = new char[len];
+      len = DecodeWrite(buf, len, bin);
+      // TODO: assert !res
+      BIO_write(bp, buf, len);
+      delete[] buf;
+    } else {
+      BIO_free(bp);
+      return NULL;
+    }
+  }
+
+  return bp;
+}
+
 void Key::Initialize (Handle<Object> target)
   {
     HandleScope scope;
@@ -52,9 +82,9 @@ void Key::Initialize (Handle<Object> target)
 
     t->InstanceTemplate()->SetInternalFieldCount(1);
 
-    NODE_SET_PROTOTYPE_METHOD(t, "generate", Generate);
-    NODE_SET_PROTOTYPE_METHOD(t, "loadPublic", LoadPublic);
-    NODE_SET_PROTOTYPE_METHOD(t, "loadPrivate", LoadPrivate);
+    NODE_SET_PROTOTYPE_METHOD(t, "generateRSA", GenerateRSA);
+    NODE_SET_PROTOTYPE_METHOD(t, "readX509", ReadX509);
+    NODE_SET_PROTOTYPE_METHOD(t, "readPrivate", ReadPrivate);
     NODE_SET_PROTOTYPE_METHOD(t, "toString", ToString);
     NODE_SET_PROTOTYPE_METHOD(t, "getRSA", GetRSA);
     NODE_SET_PROTOTYPE_METHOD(t, "setRSA", SetRSA);
@@ -66,9 +96,6 @@ Handle<Value> Key::New(const Arguments &args) {
   HandleScope scope;
 
   Key *key = new Key();
-  if (args.Length() > 0)
-    key->KeyLoadPublic(args[0]);
-
   key->Wrap(args.This());
   return args.This();
 }
@@ -91,7 +118,7 @@ Key::~Key () {
 
 /*** generate() ***/
 
-bool Key::KeyGenerate() {
+bool Key::KeyGenerateRSA() {
   bool result = false;
   KeyFree();
 
@@ -111,34 +138,24 @@ bool Key::KeyGenerate() {
   return result;
 }
 
-Handle<Value> Key::Generate(const Arguments& args) {
+Handle<Value> Key::GenerateRSA(const Arguments& args) {
   HandleScope scope;
 
   Key *key = ObjectWrap::Unwrap<Key>(args.This());
-  key->KeyGenerate();
+  key->KeyGenerateRSA();
   return args.This();
 }
 
-/*** loadPublic() ***/
+/*** loadX509() ***/
 
-bool Key::KeyLoadPublic(Handle<Value> arg) {
+bool Key::KeyReadX509(Handle<Value> arg) {
   HandleScope scope;
 
   KeyFree();
 
-  BIO *bp = BIO_new(BIO_s_mem());
-  // TODO: assert bp
-
-  ssize_t len = DecodeBytes(arg);
-  if (len >= 0) {
-    char *buf = new char[len];
-    len = DecodeWrite(buf, len, arg);
-    // TODO: assert !res
-    BIO_write(bp, buf, len);
-    delete[] buf;
-  } else {
+  BIO *bp = binaryToBIO(arg);
+  if (!bp)
     return false;
-  }
 
   X509 *x509 = PEM_read_bio_X509(bp, NULL, NULL, NULL);
   // TODO: assert x509
@@ -148,16 +165,16 @@ bool Key::KeyLoadPublic(Handle<Value> arg) {
   X509_free(x509);
   BIO_free(bp);
 
-  return true;
+  return pkey ? true : false;
 }
 
 Handle<Value>
-Key::LoadPublic(const Arguments& args) {
+Key::ReadX509(const Arguments& args) {
   HandleScope scope;
 
   if (args.Length() == 1) {
     Key *key = ObjectWrap::Unwrap<Key>(args.This());
-    if (key->KeyLoadPublic(args[0])) {
+    if (key->KeyReadX509(args[0])) {
       printf("loaded public, pkey: %X\n", key->pkey);
       return args.This();
     } else {
@@ -170,31 +187,17 @@ Key::LoadPublic(const Arguments& args) {
   }
 }
 
-/*** loadPrivate() ***/
+/*** readPrivate() ***/
 
 // TODO: w/ passphrase
-bool Key::KeyLoadPrivate(Handle<Value> arg) {
+bool Key::KeyReadPrivate(Handle<Value> arg) {
   HandleScope scope;
 
   KeyFree();
 
-  BIO *bp = BIO_new(BIO_s_mem());
-  // TODO: assert bp
-
-  if (arg->IsString()) {
-    Local<String> s = arg->ToString();
-    // TODO: assert !res
-    int len = s->Length();
-    char *buf = new char[len];
-    s->WriteAscii(buf, 0, len);
-    BIO_write(bp, buf, len);
-    delete[] buf;
-  } else if (Buffer::HasInstance(arg)) {
-    Local<Object> buf = arg->ToObject();
-    BIO_write(bp, Buffer::Data(buf), Buffer::Length(buf));
-  } else {
+  BIO *bp = binaryToBIO(arg);
+  if (!bp)
     return false;
-  }
 
   pkey = PEM_read_bio_PrivateKey(bp, NULL, NULL, NULL);
   // TODO: assert pkey
@@ -206,12 +209,12 @@ bool Key::KeyLoadPrivate(Handle<Value> arg) {
 }
 
 Handle<Value>
-Key::LoadPrivate(const Arguments& args) {
+Key::ReadPrivate(const Arguments& args) {
   HandleScope scope;
 
   if (args.Length() == 1) {
     Key *key = ObjectWrap::Unwrap<Key>(args.This());
-    if (key->KeyLoadPrivate(args[0]))
+    if (key->KeyReadPrivate(args[0]))
       return args.This();
     else {
       Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
@@ -244,15 +247,15 @@ Handle<Value> Key::KeyToString() {
       }
     } else if (rsa && rsa->n) {
       /* n: is at least public key */
-      X509 *x509 = X509_new();
+      //X509 *x509 = X509_new();
       // TODO: assert result
-      X509_set_pubkey(x509, pkey);
-      if (PEM_write_bio_X509(bp, x509)) {
+      //X509_set_pubkey(x509, pkey);
+      if (/*PEM_write_bio_X509*/PEM_write_bio_PUBKEY(bp, pkey/*x509*/)) {
         char *data;
         long len = BIO_get_mem_data(bp, &data);
         result = scope.Close(Encode(data, len));
       }
-      X509_free(x509);
+      //X509_free(x509);
     }
 
     BIO_free(bp);
