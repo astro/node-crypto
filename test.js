@@ -91,25 +91,28 @@ var q = "\xf3\xdc\x80\x15\x4d\x74\xd6\x52\x67\xc8\x51\xe2\x88\x08" +
 
 console.log('cert1');
 var cert=(new crypto.Key);
-cert.loadPublic(certPem);
+cert.readX509(certPem);
 var rsa = cert.getRSA();
 assert.equal(e, rsa.e.toString('binary'));
 assert.equal(n, rsa.n.toString('binary'));
 console.log('cert2');
 var cert2 = (new crypto.Key);
-cert2.loadPublic(cert.toString());
-assert.equal(cert.toString(), cert2.toString());
+var cp = cert.toPUBKEY();
+console.log('loading: '+cp);
+cert2.readPUBKEY(cp);
+console.log('loaded');
+assert.equal(cp, cert2.toPUBKEY());
 
 console.log('key1');
 var key=(new crypto.Key);
-key.loadPrivate(keyPem);
+key.readRSAPrivateKey(keyPem);
 rsa = key.getRSA();
 assert.equal(e, rsa.e.toString('binary'));
 assert.equal(n, rsa.n.toString('binary'));
 assert.equal(p, rsa.p.toString('binary'));
 assert.equal(q, rsa.q.toString('binary'));
 assert.equal(d, rsa.d.toString('binary'));
-assert.equal(keyPem.toString(), key.toString());
+assert.equal(keyPem.toRSAPrivateKey(), key.toRSAPrivateKey());
 
 console.log('key2');
 key=(new crypto.Key);
@@ -120,3 +123,7 @@ assert.ok(rsa.n.length);
 assert.ok(rsa.p.length);
 assert.ok(rsa.q.length);
 assert.ok(rsa.d.length);
+
+cert = new crypto.Key();
+cert.setRSA({ n: n, e: e });
+console.log(cert.toPUBKEY());

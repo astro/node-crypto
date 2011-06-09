@@ -10,8 +10,10 @@ class Key : public ObjectWrap {
     Initialize (v8::Handle<v8::Object> target);
   bool KeyGenerateRSA();
   bool KeyReadX509(Handle<Value> arg);
-  bool KeyReadPrivate(Handle<Value> arg);
-  Handle<Value> KeyToString();
+  bool KeyReadRSAPrivateKey(Handle<Value> arg);
+  bool KeyReadPUBKEY(Handle<Value> arg);
+  Handle<Value> KeyToRSAPrivateKey();
+  Handle<Value> KeyToPUBKEY();
   Handle<Value> KeyGetRSA();
   bool KeySetRSA(Handle<Object> arg);
   void KeyFree();
@@ -25,9 +27,13 @@ class Key : public ObjectWrap {
   static Handle<Value>
     ReadX509(const Arguments& args);
   static Handle<Value>
-    ReadPrivate(const Arguments& args);
+    ReadRSAPrivateKey(const Arguments& args);
   static Handle<Value>
-    ToString(const Arguments& args);
+    ReadPUBKEY(const Arguments& args);
+  static Handle<Value>
+    ToRSAPrivateKey(const Arguments& args);
+  static Handle<Value>
+    ToPUBKEY(const Arguments& args);
   static Handle<Value>
     GetRSA(const Arguments& args);
   static Handle<Value>

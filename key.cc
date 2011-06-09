@@ -84,8 +84,10 @@ void Key::Initialize (Handle<Object> target)
 
     NODE_SET_PROTOTYPE_METHOD(t, "generateRSA", GenerateRSA);
     NODE_SET_PROTOTYPE_METHOD(t, "readX509", ReadX509);
-    NODE_SET_PROTOTYPE_METHOD(t, "readPrivate", ReadPrivate);
-    NODE_SET_PROTOTYPE_METHOD(t, "toString", ToString);
+    NODE_SET_PROTOTYPE_METHOD(t, "readRSAPrivateKey", ReadRSAPrivateKey);
+    NODE_SET_PROTOTYPE_METHOD(t, "readPUBKEY", ReadPUBKEY);
+    NODE_SET_PROTOTYPE_METHOD(t, "toRSAPrivateKey", ToRSAPrivateKey);
+    NODE_SET_PROTOTYPE_METHOD(t, "toPUBKEY", ToPUBKEY);
     NODE_SET_PROTOTYPE_METHOD(t, "getRSA", GetRSA);
     NODE_SET_PROTOTYPE_METHOD(t, "setRSA", SetRSA);
 
@@ -187,10 +189,10 @@ Key::ReadX509(const Arguments& args) {
   }
 }
 
-/*** readPrivate() ***/
+/*** readRSAPrivateKey() ***/
 
 // TODO: w/ passphrase
-bool Key::KeyReadPrivate(Handle<Value> arg) {
+bool Key::KeyReadRSAPrivateKey(Handle<Value> arg) {
   HandleScope scope;
 
   KeyFree();
@@ -209,12 +211,12 @@ bool Key::KeyReadPrivate(Handle<Value> arg) {
 }
 
 Handle<Value>
-Key::ReadPrivate(const Arguments& args) {
+Key::ReadRSAPrivateKey(const Arguments& args) {
   HandleScope scope;
 
   if (args.Length() == 1) {
     Key *key = ObjectWrap::Unwrap<Key>(args.This());
-    if (key->KeyReadPrivate(args[0]))
+    if (key->KeyReadRSAPrivateKey(args[0]))
       return args.This();
     else {
       Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
@@ -227,9 +229,49 @@ Key::ReadPrivate(const Arguments& args) {
   }
 }
 
-/*** toString() ***/
+/*** readPUBKEY() ***/
 
-Handle<Value> Key::KeyToString() {
+// TODO: w/ passphrase
+bool Key::KeyReadPUBKEY(Handle<Value> arg) {
+  HandleScope scope;
+
+  KeyFree();
+
+  BIO *bp = binaryToBIO(arg);
+  if (!bp)
+    return false;
+
+  pkey = PEM_read_bio_PUBKEY(bp, NULL, NULL, NULL);
+  // TODO: assert pkey
+  if (!pkey)
+    ERR_print_errors_fp(stderr);
+  BIO_free(bp);
+
+  return true;
+}
+
+Handle<Value>
+Key::ReadPUBKEY(const Arguments& args) {
+  HandleScope scope;
+
+  if (args.Length() == 1) {
+    Key *key = ObjectWrap::Unwrap<Key>(args.This());
+    if (key->KeyReadPUBKEY(args[0]))
+      return args.This();
+    else {
+      Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+      return ThrowException(exception);
+    }
+
+  } else {
+    Local<Value> exception = Exception::TypeError(String::New("Bad argument"));
+    return ThrowException(exception);
+  }
+}
+
+/*** toRSAPrivateKey() ***/
+
+Handle<Value> Key::KeyToRSAPrivateKey() {
   HandleScope scope;
   Handle<Value> result = Null();
 
@@ -237,25 +279,12 @@ Handle<Value> Key::KeyToString() {
     BIO *bp = BIO_new(BIO_s_mem());
 
     struct rsa_st *rsa = EVP_PKEY_get1_RSA(pkey);
-    // TODO: let openssl check for priv/pub?
-    if (rsa && rsa->d) {
-      /* d: is private key */
+    if (rsa) {
       if (PEM_write_bio_RSAPrivateKey(bp, rsa, NULL, NULL, 0, NULL, NULL)) {
         char *data;
         long len = BIO_get_mem_data(bp, &data);
         result = scope.Close(Encode(data, len));
       }
-    } else if (rsa && rsa->n) {
-      /* n: is at least public key */
-      //X509 *x509 = X509_new();
-      // TODO: assert result
-      //X509_set_pubkey(x509, pkey);
-      if (/*PEM_write_bio_X509*/PEM_write_bio_PUBKEY(bp, pkey/*x509*/)) {
-        char *data;
-        long len = BIO_get_mem_data(bp, &data);
-        result = scope.Close(Encode(data, len));
-      }
-      //X509_free(x509);
     }
 
     BIO_free(bp);
@@ -264,11 +293,39 @@ Handle<Value> Key::KeyToString() {
   return result;
 }
 
-Handle<Value> Key::ToString(const Arguments& args) {
+Handle<Value> Key::ToRSAPrivateKey(const Arguments& args) {
   HandleScope scope;
 
   Key *key = ObjectWrap::Unwrap<Key>(args.This());
-  return scope.Close(key->KeyToString());
+  return scope.Close(key->KeyToRSAPrivateKey());
+}
+
+/*** toPUBKEY() ***/
+
+Handle<Value> Key::KeyToPUBKEY() {
+  HandleScope scope;
+  Handle<Value> result = Null();
+
+  if (pkey) {
+    BIO *bp = BIO_new(BIO_s_mem());
+
+    if (PEM_write_bio_PUBKEY(bp, pkey)) {
+        char *data;
+        long len = BIO_get_mem_data(bp, &data);
+        result = scope.Close(Encode(data, len));
+    }
+
+    BIO_free(bp);
+  }
+
+  return result;
+}
+
+Handle<Value> Key::ToPUBKEY(const Arguments& args) {
+  HandleScope scope;
+
+  Key *key = ObjectWrap::Unwrap<Key>(args.This());
+  return scope.Close(key->KeyToPUBKEY());
 }
 
 /*** getRSA() ***/
